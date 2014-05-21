@@ -1,0 +1,3 @@
+js/functionsvars.js
+    radioStations.push(['Virgin Rock Classic', 'http://shoutcast.unitedradio.it:1307/listen.pls']);
+    radioStations.push(['Radio Company', 'http://str01.fluidstream.net:7050/listen.pls']);

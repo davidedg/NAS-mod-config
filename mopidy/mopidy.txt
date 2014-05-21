@@ -1,0 +1,235 @@
+
+
+wget -q -O - http://apt.mopidy.com/mopidy.gpg | sudo apt-key add -
+
+
+cat <<EOF >/etc/apt/sources.list.d/mopidy.list
+# Mopidy APT archive
+deb http://apt.mopidy.com/ stable main contrib non-free
+deb-src http://apt.mopidy.com/ stable main contrib non-free
+EOF
+
+apt-get update
+apt-get --install-recommends install mopidy
+
+# Spotify Extension
+apt-get --install-recommends install mopidy-spotify
+
+# Google Play Music Extension:
+apt-get install python-pip
+pip install gmusicapi
+
+
+
+# TEST GSTREAMER AUDIO output
+gst-inspect-0.10
+gst-launch-0.10 audiotestsrc ! audioresample ! autoaudiosink
+
+
+
+# Create dedicated user
+useradd  --system --create-home --no-log-init mopidy
+mv /home/mopidy /mnt/data-d1/
+ln -s /mnt/data-d1/mopidy /home/
+
+
+# Not sure if really needed...
+adduser mopidy lp
+adduser mopidy audio
+adduser mopidy plugdev
+
+
+# Create startup script
+vi /etc/init.d/mopidy
+######################################################################
+#!/bin/bash
+# mopidy daemon
+# chkconfig: 345 20 99
+# description: mopidy daemon
+# processname: mopidy
+### BEGIN INIT INFO
+# Provides:          mopidy deamon
+# Required-Start:    $remote_fs $syslog $network
+# Required-Stop:     $remote_fs $syslog $network
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Start mopidy daemon at boot time
+# Description:       Enable mopidy music server
+### END INIT INFO
+DAEMON_PATH="/usr/bin/"
+ 
+DAEMON=mopidy
+CHUSER=mopidy
+DAEMONOPTS=""
+ 
+NAME=mopidy
+DESC="My mopidy init script"
+PIDFILE=/var/run/$NAME.pid
+SCRIPTNAME=/etc/init.d/$NAME
+ 
+case "$1" in
+start)
+        echo "Starting Mopidy Daemon"
+        start-stop-daemon --start --chuid $CHUSER --background --exec /usr/bin/mopidy --pidfile $PIDFILE --make-pidfile
+;;
+stop)
+        echo "Stopping Mopidy Daemon"
+        killall -u mopidy
+		sleep 4
+		killall -s 9 -u mopidy
+;;
+restart)
+        $0 stop
+        $0 start
+;;
+debug)
+        $0 stop
+        echo "Starting Debug Run of Mopidy"
+        start-stop-daemon --start --chuid $CHUSER --exec /usr/bin/mopidy
+        $0 stop
+;;
+ 
+*)
+        echo "Usage: $0 {start|stop|restart|debug}"
+        exit 1
+esac
+##############################################################################
+
+
+chmod +x /etc/init.d/mopidy
+
+
+# Run it once to create home structure and default config
+service mopidy debug
+# It should auto exit with errors, it's fine.
+
+# protect your credentials...
+chmod 0640 /home/mopidy/.config/mopidy/mopidy.conf
+
+# Then complete configuration:
+vi  /home/mopidy/.config/mopidy/mopidy.conf
+#################################################################
+
+[http]
+enabled = true
+hostname = 0.0.0.0
+static_dir = ~/webclient
+
+
+[mpd]
+enabled=true
+hostname = 0.0.0.0
+
+[local]
+enabled = true
+media_dir = /mnt/data-d1/share/MEDIA/MUSICA
+
+[spotify]
+enabled = true
+username = username
+password = ********
+bitrate = 320
+
+[gmusic]
+enabled = true
+username = user@gmail.com
+password =  < you can create an APP password here >
+deviceid = < get it with your phone by dialing *#*#8255#*#* and look for "aid" >
+
+
+
+#################################################################
+
+
+
+# Ensure correct ownership
+chown -R mopidy:mopidy /home/mopidy/
+
+
+# RESCAN LOCAL LIBRARY:
+su - mopidy -c 'mkdir -p /home/mopidy/.local/share/mopidy/local/playlists'
+su - mopidy -c 'touch /home/mopidy/.local/share/mopidy/local/tag_cache'
+su - mopidy -c 'mopidy local scan'
+
+
+# Make it run at startup
+insserv mopidy
+
+
+###############################################
+# Download some HTTP-Clients
+
+
+mkdir /home/mopidy/webclient-woutervanwijk
+wget -P /home/mopidy/webclient-woutervanwijk --no-check-certificate https://github.com/woutervanwijk/Mopidy-Webclient/archive/master.zip
+
+mkdir /home/mopidy/webclient-lux
+wget -P /home/mopidy/webclient-lux --no-check-certificate https://github.com/dz0ny/mopidy-lux/archive/master.zip
+
+mkdir /home/mopidy/webclient-jukepi
+wget -P /home/mopidy/webclient-jukepi --no-check-certificate https://github.com/meantimeit/jukepi/archive/dev.zip
+
+
+
+# Unpack all of them
+apt-get install unzip
+
+# woutervanwijk's - https://github.com/woutervanwijk/Mopidy-WebClient
+cd /home/mopidy/webclient-woutervanwijk
+unzip master.zip
+rm master.zip
+cd Mopidy-Webclient-master/
+mv * .[^.]* ..
+cd ..
+rmdir Mopidy-Webclient-master
+
+# add your radio streams to js/functionsvars.js - see radiostreams.txt
+
+
+# dz0ny's LUX - https://github.com/dz0ny/mopidy-lux
+cd /home/mopidy/webclient-lux
+unzip master.zip
+rm master.zip
+cd mopidy-lux-master/
+mv * .[^.]* ..
+cd ..
+rmdir mopidy-lux-master
+
+
+# meantimeit's JukePi - https://github.com/meantimeit/jukepi
+cd /home/mopidy/webclient-jukepi
+unzip dev.zip
+rm dev.zip
+cd jukepi-dev/
+mv * .[^.]* ..
+cd ..
+rmdir jukepi-dev
+
+# JukePi dependencies
+
+
+# set ownership
+chown -R mopidy:mopidy /home/mopidy/*
+
+
+
+# Now choose which one you like (restart mopidy and clear browser cache when you switch):
+# I like the woutervanwijk/webclient as I feel is the most complete.
+
+rm /home/mopidy/webclient && ln -sf webclient-woutervanwijk/webclient /home/mopidy/webclient
+rm /home/mopidy/webclient && ln -sf webclient-woutervanwijk/flatclient /home/mopidy/webclient
+rm /home/mopidy/webclient && ln -sf webclient-lux/dist /home/mopidy/webclient
+rm /home/mopidy/webclient && ln -sf webclient-jukepi/build /home/mopidy/webclient
+
+
+###########################################################
+
+JukePi:
+
+apt-get install git
+su - mopidy -c 'git config --global http.sslVerify false'
+su - mopidy -c 'git clone git://github.com/meantimeit/jukepi.git && cd jukepi && git submodule update --init --recursive'
+su - mopidy -c 'git config --global http.sslVerify true'
+
+
+
