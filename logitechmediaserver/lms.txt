@@ -1,0 +1,54 @@
+#################################################################
+#################################################################
+# LOGITECH MEDIA SERVER
+#################################################################
+#################################################################
+
+See bt-sound.txt for preparation of AUDIO subsystem
+
+#################################################################
+
+
+http://downloads.slimdevices.com/LogitechMediaServer_v7.8.0/
+
+cd /opt
+wget http://downloads.slimdevices.com/LogitechMediaServer_v7.8.0/logitechmediaserver_7.8.0_all.deb
+gdebi logitechmediaserver_7.8.0_all.deb
+
+
+# If we use USB stick as rootfs, media rescan can really slow system.
+# I move its data to a scratch partition on HDD:
+mkdir -p /scratch/var/lib
+mv /var/lib/squeezeboxserver /scratch/var/lib/
+ln -s /scratch/var/lib/squeezeboxserver /var/lib/squeezeboxserver
+
+
+# LMS will run as user squeezeboxserver, let this user create PA cookies:
+# pulse cookies
+dpkg-statoverride --update --add squeezeboxserver root 0775 /usr/share/squeezeboxserver
+
+
+# Now open up interface on http://ip-of-nas:9000
+# configure basic settings and add a media library.
+
+# Under Settings / Plugins you may want to disable all unused plugins to save ram
+
+
+# Enable LocalPlayer (aka "SqueezeLite")
+############################################## 
+
+Squeezelite is a software emulator of Logitech speakers.
+You must enable 3rd party plugins, then enable the "LocalPlayer" plugin.
+
+Then configure its settings:
+
+Binary: squeezelite-armv5te
+Additional Options: 
+# for ALSA-only:
+-o default -s 127.0.0.1 -n Kitchen-BT-Speakers
+# for PULSEAUDIO:
+-o pulse -s 127.0.0.1 -n Kitchen-BT-Speakers
+
+
+
+Happy Music!
