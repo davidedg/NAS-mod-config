@@ -1,0 +1,5 @@
+#!/bin/sh
+smbpids=`pgrep smbd`
+for smbpid in $smbpids; do
+   smbcontrol $smbpid close-share cmd-smb-resetcmdsessions >/dev/nul 2>&1
+done

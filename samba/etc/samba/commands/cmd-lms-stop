@@ -1,0 +1,3 @@
+#!/bin/sh
+service squeezelite stop
+service logitechmediaserver stop

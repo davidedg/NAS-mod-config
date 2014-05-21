@@ -1,0 +1,8 @@
+# Install SAMBA package:
+apt-get install samba
+
+cp /etc/samba/smb.conf /etc/samba/smb.conf.dist
+
+# See samba/etc/samba/smb.conf for a sample working samba configuration and adapt it to your needs.
+# See samba/etc/samba/commands for an example of preexec commands in samba shares.
+

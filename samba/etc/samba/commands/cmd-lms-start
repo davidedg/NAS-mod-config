@@ -1,0 +1,4 @@
+#!/bin/sh
+service logitechmediaserver start
+sleep 20
+service squeezelite start
