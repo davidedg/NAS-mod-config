@@ -1,0 +1,320 @@
+#################################################################
+#################################################################
+# Bluetooth and Audio
+#################################################################
+#################################################################
+
+
+Introduction:
+#################################################################
+
+Linux sound support can be fairly convoluted, to be honest.
+See http://tuxradar.com/content/how-it-works-linux-audio-explained for better insight.
+
+
+Being on a NAS with limited amount of memory, I searched for a solution that required 
+only the minimum.
+
+The very minimum memory footprint is achieved with ALSA-only stack.
+This poses some limitations, though: by default, with ALSA, only 1 application at a time
+can the sound card, if the card has no hardware mixer.
+ALSA comes with the dmixer device support: a software mixer which unfortunately can not
+work with Bluetooth devices (since BT is a plugin in ALSA, not a sound card).
+
+To be able to use more audio applications concurrently on same soundcard, a sound server is thus required.
+Amongst all sound servers available, I chose pulseaudio, basically because of its documentation for BT (it just works).
+
+The performance loss in term of CPU and RAM is dramatic, though.
+
+The main purpose, at least for me, is indeed just to use Logitech Media Server or Mopidy to stream audio
+to bluetooth speakers, so I can live with 1 app at a time, and benefit from lower resource usage.
+
+I share both configurations (ALSA-only and PA), as PA is surely more flexible: for example,
+ network sound server so that my friends can connect and stream music at parties ;P
+
+ 
+Also, this guide is specific and geared towards BT-AUDIO.
+For other sound cards it may be easier; recently I set up an ESI U46XL usb audio card 
+for my friend and since it's a real card, ALSA dmixer worked with no pain.
+In other words... your mileage may vary ;P
+
+
+#################################################################
+# CONFIGURE BLUETOOTH
+#################################################################
+
+First things first.
+You will need a kernel with Bluetooth, Sound and BT-audio support
+See the kernel guide for the optional part about it.
+
+
+# Install Bluetooth, ALSA and some music players:
+apt-get install bluetooth bluez-hcidump python-gobject-2 python-gobject bluez-tools
+apt-get install bluez-alsa alsa-base alsa-tools alsa-utils 
+apt-get install alsaplayer-text mplayer
+
+
+# ENABLE AUDIO services for Bluetooth:
+
+In section [General] of /etc/bluetooth/audio.conf  add or modify the entry:
+
+Enable=Source,Sink,Media,Socket
+
+
+
+# BLUETOOTH SCAN, PAIR AND CONNECT:
+# We will use the front-ends from the "bluez-tools" project, which simplify alot!
+# CONNECT BT:
+
+# Verify that the BT adapter is correctly seen:
+bt-adapter -l
+	Available adapters:
+	nashostname-0 (00:19:5B:52:94:A3)	<< this is mac of my BELKIN USB BT stick
+
+# discover nearby BT devices (you my have to run it twice to see actual BT names)
+bt-adapter -d
+	Searching...
+
+	[00:1D:DF:BE:10:4C]
+	  Name: PHILIPS AS111
+	  Alias: PHILIPS AS111
+	  Address: 00:1D:DF:BE:10:4C
+	  Icon: audio-card
+	  Class: 0x240404
+	  LegacyPairing: 0
+	  Paired: 0
+	  RSSI: -44
+
+	Done
+
+
+# Connect to BT Speakers, you will be asked for PIN code if device needs it (usually 0000, 1111, 1234, etc)
+bt-device -c 00:1D:DF:BE:10:4C
+	Connecting to: 00:1D:DF:BE:10:4C
+	Agent registered
+	Device: PHILIPS AS111 (00:1D:DF:BE:10:4C)
+	Enter PIN code: ****
+	Agent released
+	Done
+
+# Set to automatically connect if in range
+bt-device --set 00:1D:DF:BE:10:4C Trusted 1
+	Trusted: 0 -> 1
+
+# Now connect using the AUDIO profile	
+bt-audio -c 00:1D:DF:BE:10:4C
+	Connecting to an audio service
+	Audio service is connected
+
+
+	
+	
+OK, now the BT part is done.
+We need to decide how to configure the SOUND system
+
+
+
+
+#################################################################
+# ALSA-only
+#################################################################
+
+Let's start with the easiest one.
+It's as simply as define a 
+
+# /etc/asound.conf
+#########################################
+pcm.!default {
+    type plug
+    slave.pcm {
+      type bluetooth
+      device 00:1D:DF:BE:10:4C
+      profile "auto"
+    }
+    hint {
+      show on
+      description "BT Speakers"
+    }
+}
+#########################################
+
+
+# Test output: we'll hear a nice female voice...
+speaker-test -t wav -c 2
+
+	speaker-test 1.0.25
+	
+	Playback device is default
+	Stream parameters are 48000Hz, S16_LE, 2 channels
+	WAV file(s)
+	Rate set to 48000Hz (requested 48000Hz)
+	Buffer size range from 6144 to 6144
+	Period size range from 512 to 2048
+	Using max buffer size 6144
+	Periods = 4
+	was set period_size = 2048
+	was set buffer_size = 6144
+	 0 - Front Left
+	 1 - Front Right
+	Time per period = 2.920975
+	 0 - Front Left
+	^C
+
+	
+# Now test with MP3 with MPlayer
+
+# Test audio MP3
+mplayer file.mp3
+
+	MPlayer svn r34540 (Debian), built with gcc-4.6 (C) 2000-2012 MPlayer Team
+	mplayer: could not connect to socket
+	mplayer: No such file or directory
+	Failed to open LIRC support. You will not be able to use your remote control.
+
+	Playing /data/share/MEDIA/MUSICA/file.mp3.
+	libavformat version 53.21.1 (external)
+	Mismatching header version 53.19.0
+	Audio only file format detected.
+	Clip info:
+	 Title:
+	 Artist: Adele
+	 Album: Adele
+	 Year:
+	 Comment:
+	 Genre: Unknown
+	Load subtitles in /data/share/MEDIA/MUSICA/
+	==========================================================================
+	Requested audio codec family [mpg123] (afm=mpg123) not available.
+	Enable it at compilation.
+	Opening audio decoder: [ffmpeg] FFmpeg/libavcodec audio decoders
+	libavcodec version 53.35.0 (external)
+	Mismatching header version 53.32.2
+	AUDIO: 44100 Hz, 2 ch, floatle, 160.0 kbit/5.67% (ratio: 20000->352800)
+	Selected audio codec: [ffmp3float] afm: ffmpeg (FFmpeg MPEG layer-3 audio)
+	==========================================================================
+	AO: [pulse] Init failed: Connection refused
+	Failed to initialize audio driver 'pulse'
+	AO: [alsa] 44100Hz 2ch floatle (4 bytes per sample)
+	Video: no video
+	Starting playback...
+
+
+# You may notice the lines
+	AO: [pulse] Init failed: Connection refused
+	Failed to initialize audio driver 'pulse'
+
+#This is because of mplayer default audio settings, which you may change in /etc/mplayer/mplayer.conf
+ao=pulse,alsa,sdl:aalib   ->   ao=alsa,pulse,sdl:aalib
+
+
+# Resource Usage:
+UDEV + Bluetooth Daemon ram occupation is negligible:
+RES is ~2.7MB, but free shows a difference of less than 1MB; ~0% cpu
+
+MP3 playing with Mplayer: +3.5MB and CPU 19% 
+
+
+# DRAWBACKS: I could not succeed in using alsamixer, so no volume control.
+
+
+
+
+#################################################################
+# PULSEAUDIO via ALSA
+#################################################################
+
+# Introduction
+#############################
+
+In this setup PA will use ALSA default device as a "sink" (output device)
+
+PA best practice is to NOT run as root and NOT as a system daemon ("system mode"),
+ instead every user should spawn its per-session daemon.
+
+As root, you can start it manually with:
+# it will show a warning about running as root
+pulseaudio --daemonize --exit-idle-time=-1
+	W: [pulseaudio] main.c: This program is not intended to be run as root (unless --system is specified).
+
+To kill it, use:
+pulseaudio -k
+
+
+Normal users can instead benefit from AUTOSPAWN mode (enabled by default)
+# If using an audio app as non-root, PA will autospawn and autoclose.
+# AFAIK, to be able to use and autospawn PA, normal users must:
+# - Have correct UIDs (Not System UID)
+# - Have a valid Home Directory
+# - Have permissions to create ~/.pulse*
+
+
+If you run audio apps as root, you will need to pre-launch pulseaudio, either via 
+rc.local or via a init.d script (***)
+
+
+# Install PA
+#############################
+
+apt-get install pulseaudio pulseaudio-utils
+
+## /etc/pulse/
+ # daemon.conf: default values
+ # default.pa:  used in per-session mode
+ # system.pa:   used in system-mode
+
+# change resample mode (can't remember why it doesn't work otherwise):
+# /etc/pulse/daemon.conf:
+resample-method = trivial
+
+
+# instruct PA to use ALSA device as a sink:
+# we're enabling it in default.pa because we're using session mode.
+sed --in-place -e 's/^#load-module module-alsa-sink/load-module module-alsa-sink/' /etc/pulse/default.pa
+
+
+
+# Try it:
+pulseaudio --daemonize --exit-idle-time=-1
+alsamixer
+speaker-test -t wav -c 2 -D pulse
+mplayer -ao pulse file.mp3
+# close it afterwards:
+pulseaudio -k
+
+
+
+# You may want to tune /etc/pulse/daemon.conf parameters:
+shm-size-bytes = 8388608 # 8MB instead of 64Mib
+allow-exit = no
+exit-idle-time = -1
+
+
+#################################################################
+# PULSEAUDIO alone (pulseaudio-module-bluetooth)
+#################################################################
+
+If for some reason we could not configure a /etc/asound.conf for 
+BT audio, we can still use PA native BT module.
+
+apt-get install pulseaudio pulseaudio-utils pulseaudio-module-bluetooth
+
+The instructions are the same, except you won't need the part:
+########
+# instruct PA to use ALSA device as a sink:
+# we're enabling it in default.pa because we're using session mode.
+sed --in-place -e 's/^#load-module module-alsa-sink/load-module module-alsa-sink/' /etc/pulse/default.pa
+########
+
+You may want to rename /etc/asound.conf to be sure it is working as expected.
+
+
+
+
+
+#######################################################################################################################
+## (***): if you really need the init.d script, drop me a mail: delgrande.davide at gmail.com
+## Credits: 
+## http://code.google.com/p/bluez-tools/
+## http://www.alsa-project.org/main/index.php/Asoundrc
+## http://rootprompt.apatsch.net/2013/04/23/raspberry-pi-network-audio-player-pulseaudio-dlna-and-bluetooth-a2dp-part-3-bluetooth/
+#######################################################################################################################
