@@ -1,5 +1,6 @@
 #################################################################
 #################################################################
+#################################################################
 # Bluetooth and Audio
 #################################################################
 #################################################################
@@ -16,18 +17,27 @@ Being on a NAS with limited amount of memory, I searched for a solution that req
 only the minimum.
 
 The very minimum memory footprint is achieved with ALSA-only stack.
-This poses some limitations, though: by default, with ALSA, only 1 application at a time
-can the sound card, if the card has no hardware mixer.
+This poses some limitations, though: with ALSA, by default, only 1 application at a time
+can access the sound card, if the card has no hardware mixer.
 ALSA comes with the dmixer device support: a software mixer which unfortunately can not
 work with Bluetooth devices (since BT is a plugin in ALSA, not a sound card).
 
 To be able to use more audio applications concurrently on same soundcard, a sound server is thus required.
-Amongst all sound servers available, I chose pulseaudio, basically because of its documentation for BT (it just works).
+Amongst all sound servers available, I chose pulseaudio, mainly because there are many
+ docs and resources available.
 
-The performance loss in term of CPU and RAM is dramatic, though.
+PulseAudio has some really nice features, but its current implementation
+ in Debian Wheezy (with ConsoleKit) is cumbersome.
+Hopefully Jessie will come with PulseAudio5/SystemD... we will see.
+ 
 
-The main purpose, at least for me, is indeed just to use Logitech Media Server or Mopidy to stream audio
-to bluetooth speakers, so I can live with 1 app at a time, and benefit from lower resource usage.
+
+If you just need 1 app at a time accessing sound (like Mopidy or Logitech Media Server),
+ or if you can just use a hw/sw mixer, my advice is to go with ALSA-only (easier and much 
+ less resources used).
+
+If you need something more, follow the PulseAudio section.
+
 
 I share both configurations (ALSA-only and PA), as PA is surely more flexible: for example,
  network sound server so that my friends can connect and stream music at parties ;P
@@ -36,7 +46,7 @@ I share both configurations (ALSA-only and PA), as PA is surely more flexible: f
 Also, this guide is specific and geared towards BT-AUDIO.
 For other sound cards it may be easier; recently I set up an ESI U46XL usb audio card 
 for my friend and since it's a real card, ALSA dmixer worked with no pain.
-In other words... your mileage may vary ;P
+In other words... YMMV ;P
 
 
 #################################################################
@@ -48,9 +58,9 @@ You will need a kernel with Bluetooth, Sound and BT-audio support
 See the kernel guide for the optional part about it.
 
 
-# Install Bluetooth, ALSA and some music players:
-apt-get install bluetooth bluez-hcidump python-gobject-2 python-gobject bluez-tools
-apt-get install bluez-alsa alsa-base alsa-tools alsa-utils 
+# Install BlueZ, ALSA and some music players:
+apt-get install bluez bluez-tools python-gobject-2 python-gobject
+apt-get install alsa-base alsa-utils bluez-alsa
 apt-get install alsaplayer-text mplayer
 
 
@@ -58,7 +68,7 @@ apt-get install alsaplayer-text mplayer
 
 In section [General] of /etc/bluetooth/audio.conf  add or modify the entry:
 
-Enable=Source,Sink,Media,Socket
+Enable=Socket
 
 
 
@@ -105,12 +115,14 @@ bt-device --set 00:1D:DF:BE:10:4C Trusted 1
 bt-audio -c 00:1D:DF:BE:10:4C
 	Connecting to an audio service
 	Audio service is connected
+or
+	Audio service is already connected
 
 
-	
+
 	
 OK, now the BT part is done.
-We need to decide how to configure the SOUND system
+We need now to configure the SOUND system
 
 
 
@@ -119,7 +131,7 @@ We need to decide how to configure the SOUND system
 # ALSA-only
 #################################################################
 
-Let's start with the easiest one.
+Let's start with the easiest one first
 It's as simply as define a 
 
 # /etc/asound.conf
@@ -219,8 +231,9 @@ MP3 playing with Mplayer: +3.5MB and CPU 19%
 
 
 
+
 #################################################################
-# PULSEAUDIO via ALSA
+# PULSEAUDIO via ALSA, as session deamon
 #################################################################
 
 # Introduction
@@ -231,7 +244,7 @@ In this setup PA will use ALSA default device as a "sink" (output device)
 PA best practice is to NOT run as root and NOT as a system daemon ("system mode"),
  instead every user should spawn its per-session daemon.
 
-As root, you can start it manually with:
+As root, for testing, you can start it manually with:
 # it will show a warning about running as root
 pulseaudio --daemonize --exit-idle-time=-1
 	W: [pulseaudio] main.c: This program is not intended to be run as root (unless --system is specified).
@@ -249,7 +262,12 @@ Normal users can instead benefit from AUTOSPAWN mode (enabled by default)
 
 
 If you run audio apps as root, you will need to pre-launch pulseaudio, either via 
-rc.local or via a init.d script (***)
+rc.local or via a init.d script - remember to use --exit-idle-time=-1
+
+# Mplayer defaults
+#############################
+If you modified mplayer ao settings, it might be a good idea to 
+turn them back to defaults (ao=pulse,alsa,sdl:aalib)
 
 
 # Install PA
@@ -262,8 +280,10 @@ apt-get install pulseaudio pulseaudio-utils
  # default.pa:  used in per-session mode
  # system.pa:   used in system-mode
 
-# change resample mode (can't remember why it doesn't work otherwise):
-# /etc/pulse/daemon.conf:
+# In /etc/pulse/daemon.conf  change resample mode to either:
+# trivial: lowest cpu, low quality if 
+# src-sinc-fastest: more cpu, good resampling
+# speex-fixed-N: N from 1 to 7, lower to higher CPU/quality
 resample-method = trivial
 
 
@@ -283,14 +303,8 @@ pulseaudio -k
 
 
 
-# You may want to tune /etc/pulse/daemon.conf parameters:
-shm-size-bytes = 8388608 # 8MB instead of 64Mib
-allow-exit = no
-exit-idle-time = -1
-
-
 #################################################################
-# PULSEAUDIO alone (pulseaudio-module-bluetooth)
+# PULSEAUDIO alone (pulseaudio-module-bluetooth), as a session deamon
 #################################################################
 
 If for some reason we could not configure a /etc/asound.conf for 
@@ -298,23 +312,115 @@ BT audio, we can still use PA native BT module.
 
 apt-get install pulseaudio pulseaudio-utils pulseaudio-module-bluetooth
 
-The instructions are the same, except you won't need the part:
+The instructions are the same, except you MUST NOT use this:
 ########
 # instruct PA to use ALSA device as a sink:
 # we're enabling it in default.pa because we're using session mode.
 sed --in-place -e 's/^#load-module module-alsa-sink/load-module module-alsa-sink/' /etc/pulse/default.pa
 ########
 
-You may want to rename /etc/asound.conf to be sure it is working as expected.
+## Remember to:
+# In /etc/pulse/daemon.conf  change resample mode to either:
+# trivial: lowest cpu, low quality if 
+# src-sinc-fastest: more cpu, good resampling
+# speex-fixed-N: N from 1 to 7, lower to higher CPU/quality
+resample-method = trivial
+
+You may want to rename /etc/asound.conf to be sure it is working as expected (ie: not using ALSA).
 
 
 
+
+
+#################################################################
+# PULSEAUDIO as SYSTEM DAEMON
+#################################################################
+
+
+# Introduction
+#############################
+
+Ok, this is by far the more complex configuration.
+There is a problem with PulseAudio and ConsoleKit:
+PA lets you use more than 1 audio app at a time, but ONLY FROM SAME USER.
+This is not really PA's fault, but rather ConsoleKit
+ see: https://help.ubuntu.com/community/MultiseatX#Pulseaudio for reference.
+ 
+In recent configurations it should be possible to use PA version 5 and SystemD.
+But I wanted to stay with Debian Stable for the moment...
+
+So here's a solution: to use PulseAudio unsupported, unadviced and very ugly SYSTEM MODE.
+
+ALSAMIXER works and volume is SHARED between all users/app
+
+
+
+
+### INSTALL PULSE AUDIO (same as session daemon):
+apt-get install pulseaudio pulseaudio-utils pulseaudio-module-bluetooth
+
+## Remember to:
+# In /etc/pulse/daemon.conf  change resample mode to either:
+# trivial: lowest cpu, low quality if 
+# src-sinc-fastest: more cpu, good resampling
+# speex-fixed-N: N from 1 to 7, lower to higher CPU/quality
+resample-method = trivial
+
+
+
+## Authorize users (each user that will be using PA must belong to group pulse-access)
+adduser root pulse-access
+adduser squeezeboxserver pulse-access
+adduser ...
+
+## Authorize PulseAudio to use BLUETOOTH D-BUS interface:
+adduser pulse bluetooth
+
+
+## Configure PULSEAUDIO for SYSTEM MODE and allow module loading
+sed --in-place -e 's/^PULSEAUDIO_SYSTEM_START=0/PULSEAUDIO_SYSTEM_START=1/' /etc/default/pulseaudio
+sed --in-place -e 's/^DISALLOW_MODULE_LOADING=1/DISALLOW_MODULE_LOADING=0/' /etc/default/pulseaudio
+sed --in-place -e 's/^; daemonize = no/daemonize = yes/' /etc/pulse/daemon.conf
+sed --in-place -e 's/^; local-server-type = user/local-server-type = system/' /etc/pulse/daemon.conf
+
+
+## Load Default config even in System Mode (for Bluetooth)
+mv /etc/pulse/system.pa /etc/pulse/system.pa.orig
+ln -s /etc/pulse/default.pa /etc/pulse/system.pa
+
+## Disable AUTOSPAWN default config
+echo "autospawn = no" >>/etc/pulse/client.conf
+
+## Restart Services to pick up changes.
+
+service pulseaudio stop ; service bluetooth stop ; service dbus stop
+service dbus start ; service bluetooth start
+## Allow some time between bluetooth connect and pulseaudio, or connect manually:
+bt-audio -c 00:1D:DF:BE:10:4C
+service pulseaudio start
+
+
+## TEST:
+# You should now be able to stream audio from ANY USER/APP:
+# Just remember to add users to pulse-access group.
+sudo -u testuser1 mplayer -ao pulse /path/to/file01.mp3
+sudo -u testuser2 mplayer -ao pulse /path/to/file02.mp3
+speaker-test -t wav -c 2 -D pulse
+sudo -u testuser3 alsamixer
+
+
+
+
+## TROUBLESHOOTING:
+# Sometimes ConsoleKit gets confused and I just had to
+killall console-kit-daemon
+# or restart all the stack (pulseaudio/bluetooth/dbus)
 
 
 #######################################################################################################################
-## (***): if you really need the init.d script, drop me a mail: delgrande.davide at gmail.com
 ## Credits: 
 ## http://code.google.com/p/bluez-tools/
 ## http://www.alsa-project.org/main/index.php/Asoundrc
 ## http://rootprompt.apatsch.net/2013/04/23/raspberry-pi-network-audio-player-pulseaudio-dlna-and-bluetooth-a2dp-part-3-bluetooth/
+## https://help.ubuntu.com/community/MultiseatX#Pulseaudio
 #######################################################################################################################
