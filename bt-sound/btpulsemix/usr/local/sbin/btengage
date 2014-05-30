@@ -102,7 +102,8 @@ if [ ${#BTRECENTPAIRS[@]} -eq 0 ]; then
   $ON_BTD_RESTART > /dev/null 2>&1
 else
   for newbtdev in ${BTRECENTPAIRS[@]}; do
-    echo "NEW DEVICE--> " $newbtdev >> /var/run/btengage.log
+    newbtdevname=`bt-device -l|grep $btdev`
+    echo "NEW DEVICE--> " $newbtdevname >> /var/run/btengage.log
     echo "Running $ON_BT_CONNECT" >> /var/run/btengage.log
     $ON_BT_CONNECT > /dev/null 2>&1
   done
