@@ -1,0 +1,9 @@
+#!/bin/sh
+BTPIN=0000
+while true; do
+  [ -f /etc/btagent-auto.conf ] && . /etc/btagent-auto.conf
+  killall bluetooth-agent >/dev/null 2>&1
+  killall -9 bluetooth-agent >/dev/null 2>&1
+  bluetooth-agent $BTPIN >/dev/null 2>&1
+  sleep 3
+done

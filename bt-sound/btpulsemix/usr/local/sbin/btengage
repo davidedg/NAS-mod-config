@@ -1,0 +1,111 @@
+#!/bin/bash
+NAME=btengage
+LOCKFILE=/var/run/$NAME.lock
+
+echo "################################" >> /var/run/btengage.log
+echo `date` >> /var/run/btengage.log
+
+# DEFAULTS
+ON_BTD_RESTART="sleep 0"
+ON_BT_CONNECT="sleep 0"
+HCI_DISCOVER_ON_CMD="hciconfig hci0 piscan"
+PAIRING_TIME=120
+
+[ -f /etc/btengage.conf ] && . /etc/btengage.conf
+
+
+# Only 1 instance allowed
+if [ -f $LOCKFILE ]; then
+  if [ -f /sys/class/leds/nsa325:red:copy/trigger ]; then
+    curr_led_brightness=`cat /sys/class/leds/nsa325:red:copy/brightness`
+    curr_led_trigger=`cat /sys/class/leds/nsa325:red:copy/trigger|cut -d"[" -f2|cut -d"]" -f1`
+    echo timer > /sys/class/leds/nsa325:red:copy/trigger
+    sleep 2
+    echo $curr_led_brightness > /sys/class/leds/nsa325:red:copy/brightness
+    echo $curr_led_trigger > /sys/class/leds/nsa325:red:copy/trigger
+  fi
+  echo "Already Running!" >> /var/run/btengage.log
+  exit 2
+fi
+touch $LOCKFILE
+
+# Is Bluetooth Service running?
+BTDPID=`pidof bluetoothd`
+BTDRUNNING=$?
+
+# if not, restart it
+if [ $BTDRUNNING -ne 0 ]; then
+  echo "BLUETOOTH IS NOT RUNNING - TRYING TO RESTART" >> /var/run/btengage.log
+  service bluetooth restart > /dev/null 2>&1
+  sleep 5
+  echo "Running $ON_BTD_RESTART" >> /var/run/btengage.log
+  $ON_BTD_RESTART > /dev/null 2>&1
+  echo "Sleeping 5 more seconds..." >> /var/run/btengage.log
+  sleep 5
+fi
+
+
+# Save currently attached BT devices
+declare -a BTDEVLIST_OLD
+i=0
+for btdev in `find /sys/class/bluetooth/hci?:*`; do
+  if [ -f $btdev/address ]; then
+    BTDEVLIST_OLD[i]=`cat $btdev/address`
+    i=$((i+1))
+  fi
+done
+
+echo "--- CURRENT LIST OF BLUETOOTH DEVICES ---" >> /var/run/btengage.log
+for i in ${BTDEVLIST_OLD[@]}; do
+  echo $i >> /var/run/btengage.log
+done
+
+
+# Turns ON DISCOVERABILITY and waits for pairing
+echo "BLUETOOTH DISCOVER ON! Will check in $PAIRING_TIME sec for newly paired devices" >> /var/run/btengage.log
+$HCI_DISCOVER_ON_CMD
+sleep $PAIRING_TIME
+
+
+# Retrieve new list of attached BT devices
+declare -a BTDEVLIST_NEW
+i=0
+for btdev in `find /sys/class/bluetooth/hci?:*`; do
+  if [ -f $btdev/address ]; then
+    BTDEVLIST_NEW[i]=`cat $btdev/address`
+    i=$((i+1))
+  fi
+done
+
+echo "--- NEW LIST OF BLUETOOTH DEVICES ---" >> /var/run/btengage.log
+for i in ${BTDEVLIST_NEW[@]}; do
+  echo $i >> /var/run/btengage.log
+done
+
+# Now compare the OLD with NEW, if nothing changed, PAIRING 
+# went wrong and we need to restart bluetooth
+declare -a BTRECENTPAIRS
+for i in "${BTDEVLIST_NEW[@]}"; do
+  skip=
+  for j in "${BTDEVLIST_OLD[@]}"; do
+    [[ $i == $j ]] && { skip=1; break; }
+  done
+  [[ -n $skip ]] || BTRECENTPAIRS+=("$i")
+done
+
+
+if [ ${#BTRECENTPAIRS[@]} -eq 0 ]; then 
+  echo "NO NEW PAIRING FOUND, RESTARTING BLUETOOTH" >> /var/run/btengage.log
+  service bluetooth restart > /dev/null 2>&1
+  sleep 5
+  echo "Running $ON_BTD_RESTART" >> /var/run/btengage.log
+  $ON_BTD_RESTART > /dev/null 2>&1
+else
+  for newbtdev in ${BTRECENTPAIRS[@]}; do
+    echo "NEW DEVICE--> " $newbtdev >> /var/run/btengage.log
+    echo "Running $ON_BT_CONNECT" >> /var/run/btengage.log
+    $ON_BT_CONNECT > /dev/null 2>&1
+  done
+fi
+
+rm -f $LOCKFILE

@@ -1,0 +1,3 @@
+# Calls Bluetooth / PulseAudio Helper
+SUBSYSTEM=="input", GROUP="input", MODE="0660"
+KERNEL=="input[0-9]*", RUN+="/usr/local/sbin/btpulsemix"

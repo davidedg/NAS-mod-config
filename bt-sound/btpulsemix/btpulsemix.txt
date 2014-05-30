@@ -1,0 +1,130 @@
+#################################################################
+#################################################################
+# Bluetooth A2DP with PULSEAUDIO MIXER
+#################################################################
+#################################################################
+
+Introduction:
+#################################################################
+
+Have a look at the CREDITS section to get an idea :D
+
+
+
+
+
+
+# Change Name, Class and timeouts
+sed --in-place -e 's/^Name = .*/Name = IvadarasSoundSystem/' /etc/bluetooth/main.conf
+sed --in-place -e 's/^DiscoverableTimeout.*/DiscoverableTimeout = 120/' /etc/bluetooth/main.conf
+sed --in-place -e 's/^Class.*/Class = 0x240404/' /etc/bluetooth/main.conf
+
+# Enable BT Audio Sinks/Media/Sources/Socket/Headset
+sed --in-place -e 's/^\[General\]$/\[General\]\nEnable=Source,Sink,Media,Headset,Socket/' /etc/bluetooth/audio.conf
+
+# update/regenerate bluetooth configuration (/var/lib/bluetooth/*)
+service bluetooth restart
+
+# Ensure name is correct, fixup Class, Discoverable on startup (choose whether or not)
+# finally protect the config file otherwise Class gets rewritten on service restart
+for btdevice in `find /var/lib/bluetooth/ -type f -name config -exec /bin/ls {} \; 2>/dev/null`
+do
+  chmod a=rw $btdevice
+  sed --in-place -e 's/^name .*$/name IvadarasSoundSystem/' $btdevice
+  sed --in-place -e 's/^pairable .*$/pairable yes/' $btdevice
+  sed --in-place -e 's/^class .*$/class  0x240404/' $btdevice
+  #echo "onmode discoverable" >> $btdevice
+  #echo "mode discoverable" >> $btdevice
+  chmod a=r $btdevice
+done
+
+# reload config
+service bluetooth restart
+
+# repopulate scan
+bt-adapter -d
+
+# If you choose not to start in Discoverable mode, you can enable it during tests with:
+hciconfig hci0 piscan
+
+
+# Spawn the bluetooth agent with PIN 0000
+bluetooth-agent 0000
+
+# this will wait for incoming devices to authorize them:
+	Authorizing request for /org/bluez/3053/hci0/dev_A0_E4_53_9E_E8_13
+	Pincode request for device /org/bluez/3053/hci0/dev_8C_71_F8_2F_99_A7
+	Authorizing request for /org/bluez/3053/hci0/dev_8C_71_F8_2F_99_A7
+	Pincode request for device /org/bluez/3053/hci0/dev_A0_E4_53_9E_E8_13
+	Agent has been terminated
+	
+###############################################################################
+#
+## To make Blutooth Agent ALWAYS available, even on bluetoothd restarts:
+#
+cat <<EOF >/usr/local/sbin/btagent-auto
+#!/bin/sh
+BTPIN=0000
+while true; do
+  [ -f /etc/btagent-auto.conf ] && . /etc/btagent-auto.conf
+  killall bluetooth-agent >/dev/null 2>&1
+  killall -9 bluetooth-agent >/dev/null 2>&1
+  bluetooth-agent \$BTPIN >/dev/null 2>&1
+  sleep 3
+done
+EOF
+
+chmod 0750 /usr/local/sbin/btagent-auto
+
+cat <<EOF >/etc/btagent-auto.conf
+# BLUETOOTH PINCODE FOR BTAGENT
+BTPIN=1234
+EOF
+
+chmod 0600 /etc/btagent-auto.conf
+
+
+# Now insert this in /etc/rc.local to spawn it at boot:
+/usr/local/sbin/btagent-auto 0<&- 1>&- 2>&- &
+###############################################################################
+
+
+
+
+# Configure UDEV rule and place btpulsemix script
+cat <<EOF >/etc/udev/rules.d/99-bluetoothpulseloop.rules
+# Calls Bluetooth / PulseAudio Helper
+SUBSYSTEM=="input", GROUP="input", MODE="0660"
+KERNEL=="input[0-9]*", RUN+="/usr/local/sbin/btpulsemix"
+EOF
+
+
+# Configure your AUDIO SINK:
+echo "AUDIOSINK=bluez_sink.00_1D_DF_BE_10_4C" > /etc/btpulsemix.conf
+
+
+
+# BTENGAGE: WORKAROUND FOR BLUETOOTH NOT ALWAYS CONNECTING UNTIL RESTART:
+-> copy btengage to /usr/local/sbin/
+
+# BT ENGAGE CONFIG EXAMPLE:
+cat <<EOF >/etc/btengage.conf
+ON_BTD_RESTART="bt-audio -c 00:1D:DF:BE:10:4C"
+#HCI_DISCOVER_ON_CMD="hciconfig hci1 piscan"
+PAIRING_TIME="120"
+ON_BT_CONNECT="aplay -D pulse /data/share/connected.wav"
+EOF
+
+
+# Make USB COPY BUTTON CALL BTENGAGE WORKAROUND:
+sed --in-place -e 's/^COPY:.*/COPY:\/usr\/local\/sbin\/btengage/' /etc/esekeyd.conf
+service esekeyd restart
+
+
+
+
+
+#######################################################################################################################
+## Credits: 
+## http://www.instructables.com/id/Turn-your-Raspberry-Pi-into-a-Portable-Bluetooth-A/?ALLSTEPS
+#######################################################################################################################

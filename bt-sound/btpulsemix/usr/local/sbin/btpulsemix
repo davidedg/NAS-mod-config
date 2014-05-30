@@ -1,0 +1,32 @@
+#!/bin/sh
+if [ "$ACTION" = "add" ]; then
+  echo "########################################" >> /var/run/btpulsemix.log
+  date >> /var/run/btpulsemix.log
+  [ -f /etc/btpulsemix.conf ] && . /etc/btpulsemix.conf
+  PA_SINK=`pactl list sinks short | grep $AUDIOSINK 2>/dev/null`
+  if [ ! -z "$PA_SINK" ]; then
+    AUDIOSOURCE="bluez_source."`echo $NAME | tr -d '"'|sed -e 's/:/_/g'`
+    echo "AUDIOSOURCE = $AUDIOSOURCE" >> /var/run/btpulsemix.log
+    echo "Waiting for PA to settle..." >> /var/run/btpulsemix.log
+    sleep 2
+    echo "SOURCES:" >> /var/run/btpulsemix.log
+    pactl list sources short >> /var/run/btpulsemix.log
+    PA_READY=`pactl list sources short | grep $AUDIOSOURCE`
+    if [ ! -z "$PA_READY" ]; then
+      echo "Mixing $AUDIOSOURCE to $AUDIOSINK..." >> /var/run/btpulsemix.log
+      pactl load-module module-loopback source=$AUDIOSOURCE sink=$AUDIOSINK rate=44100 adjust_time=0 >> /var/run/btpulsemix.log
+    else
+      echo "PulseAudio did not recognize $NAME as an AUDIO SOURCE" >> /var/run/btpulsemix.log
+    fi
+  else
+    echo "PLEASE SPECIFY A VALID AUDIOSINK IN /etc/btpulsemix.conf" >> /var/run/btpulsemix.log
+  fi
+  echo "########################################" >> /var/run/btpulsemix.log
+  exit 0
+elif [ "$ACTION" = "remove" ]; then
+  echo "$NAME disappearing from BT devices..." >> /var/run/btpulsemix.log
+  echo "########################################" >> /var/run/btpulsemix.log
+  exit 0
+fi
+echo "NOT TO BE RUN INTERACTIVELY!"
+echo "PLEASE CREATE A PROPER UDEV RULE"
