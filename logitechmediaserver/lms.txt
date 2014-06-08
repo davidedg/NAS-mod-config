@@ -27,6 +27,9 @@ ln -s /scratch/var/lib/squeezeboxserver /var/lib/squeezeboxserver
 # pulse cookies
 dpkg-statoverride --update --add squeezeboxserver root 0775 /usr/share/squeezeboxserver
 
+## Authorize for PA System Mode
+adduser squeezeboxserver pulse-access
+
 
 # Now open up interface on http://ip-of-nas:9000
 # configure basic settings and add a media library.
@@ -39,6 +42,8 @@ dpkg-statoverride --update --add squeezeboxserver root 0775 /usr/share/squeezebo
 
 Squeezelite is a software emulator of Logitech speakers.
 You must enable 3rd party plugins, then enable the "LocalPlayer" plugin.
+
+aptitude install libmad0 libflac8 libvorbisfile3 libvorbisidec1 libfaad2
 
 Then configure its settings:
 
