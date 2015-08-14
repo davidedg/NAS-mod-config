@@ -1,0 +1,272 @@
+#################################################################
+#################################################################
+# Bluetooth and Audio #  Bluez-5 + PulseAudio-5
+#################################################################
+#################################################################
+
+
+
+#################################################################
+# KERNEL PREREQUISITES
+#################################################################
+
+First things first.
+You will need a kernel with Bluetooth, Sound and BT-audio support
+See the kernel guide for the optional part about it.
+
+
+# Connect your USB BT dongle - your dmesg should be similar to:
+	Bluetooth: Core ver 2.20
+	NET: Registered protocol family 31
+	Bluetooth: HCI device and connection manager initialized
+	Bluetooth: HCI socket layer initialized
+	Bluetooth: L2CAP socket layer initialized
+	Bluetooth: SCO socket layer initialized
+	Bluetooth: BNEP (Ethernet Emulation) ver 1.3
+	Bluetooth: BNEP filters: protocol multicast
+	Bluetooth: BNEP socket layer initialized
+	usb 3-1.3: new full-speed USB device number 3 using orion-ehci
+	usbcore: registered new interface driver btusb
+
+
+	
+	
+#################################################################
+# INSTALL PACKAGES
+#################################################################
+	
+
+# Install BlueZ-5  and PulseAudio-5 with Bluetooth support:
+apt-get --no-install-recommends install pulseaudio pulseaudio-module-bluetooth bluez bluez-tools bluez-firmware python-gobject-2 python-gobject
+
+
+# Install MPlayer, along with some codecs, to later test audio output
+apt-get install mplayer
+
+
+
+
+#################################################################
+# BLUETOOTH/DBUS/PULSE PERMISSIONS
+#################################################################
+
+
+## Authorize users (each user that will be using PA must belong to group pulse-access)
+# Examples:
+adduser root pulse-access
+adduser squeezeboxserver pulse-access
+adduser ... pulse-access
+
+
+# Authorize PulseAudio - which will run as user pulse - to use BlueZ D-BUS interface:
+############################################################################
+cat <<EOF >/etc/dbus-1/system.d/pulseaudio-bluetooth.conf
+<busconfig>
+
+  <policy user="pulse">
+    <allow send_destination="org.bluez"/>
+  </policy>
+
+</busconfig>
+EOF
+############################################################################
+
+
+
+
+#################################################################
+# CONFIGURE PULSEAUDIO
+#################################################################
+
+
+# Not strictly required, but you may need:
+# In /etc/pulse/daemon.conf  change "resample-method" to either:
+# trivial: lowest cpu, low quality
+# src-sinc-fastest: more cpu, good resampling
+# speex-fixed-N: N from 1 to 7, lower to higher CPU/quality
+resample-method = trivial
+
+
+# Load  Bluetooth discover module in SYSTEM MODE:
+############################################################################
+cat <<EOF >> /etc/pulse/system.pa
+#
+### Bluetooth Support
+.ifexists module-bluetooth-discover.so
+load-module module-bluetooth-discover
+.endif
+EOF
+############################################################################
+
+
+
+# Create a systemd service for running pulseaudio in System Mode as user "pulse".
+############################################################################
+cat <<EOF >/etc/systemd/system/pulseaudio.service
+[Unit]
+Description=Pulse Audio
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/pulseaudio --system --disallow-exit --disable-shm
+
+[Install]
+WantedBy=multi-user.target
+EOF
+############################################################################
+
+systemctl daemon-reload
+systemctl enable pulseaudio.service
+
+
+
+
+
+#################################################################
+# CONNECT!
+#################################################################
+
+
+# Restart Bluetooth and check its status (those errors are fine)
+systemctl restart bluetooth
+systemctl status bluetooth
+	● bluetooth.service - Bluetooth service
+	   Loaded: loaded (/lib/systemd/system/bluetooth.service; enabled)
+	   Active: active (running) since Thu 2015-08-13 23:58:53 CEST; 28s ago
+		 Docs: man:bluetoothd(8)
+	 Main PID: 5604 (bluetoothd)
+	   Status: "Running"
+	   CGroup: /system.slice/bluetooth.service
+			   └─5604 /usr/lib/bluetooth/bluetoothd
+
+	Aug 13 23:58:53 nasivadaras bluetoothd[5604]: Bluetooth daemon 5.23
+	Aug 13 23:58:53 nasivadaras bluetoothd[5604]: Starting SDP server
+	Aug 13 23:58:53 nasivadaras bluetoothd[5604]: Bluetooth management interface 1.9 initialized
+	Aug 13 23:58:53 nasivadaras bluetoothd[5604]: Sap driver initialization failed.
+	Aug 13 23:58:53 nasivadaras bluetoothd[5604]: sap-server: Operation not permitted (1)
+	Aug 13 23:58:53 nasivadaras systemd[1]: Started Bluetooth service.
+
+
+	
+# Now use bluetoothctl to: power on the device, pair, trust and connect with bt speakers
+# It will be fine if connect will fail - it's pulseaudio that will do the actual connect.
+		[NEW] Controller 00:19:5B:52:94:A3 nasivadaras [default]
+	[bluetooth]# power on
+		Changing power on succeeded
+		[CHG] Controller 00:19:5B:52:94:A3 Powered: yes
+	[bluetooth]# agent on
+		Agent registered
+	[bluetooth]# default-agent
+		Default agent request successful
+	[bluetooth]# scan on
+		Discovery started
+		[CHG] Controller 00:19:5B:52:94:A3 Discovering: yes
+		[NEW] Device 00:1D:DF:BE:10:4C 00-1D-DF-BE-10-4C
+		[CHG] Device 00:1D:DF:BE:10:4C LegacyPairing: no
+		[CHG] Device 00:1D:DF:BE:10:4C Name: PHILIPS AS111
+		[CHG] Device 00:1D:DF:BE:10:4C Alias: PHILIPS AS111
+		[CHG] Device 00:1D:DF:BE:10:4C LegacyPairing: yes
+	[bluetooth]# pair 00:1D:DF:BE:10:4C
+		Attempting to pair with 00:1D:DF:BE:10:4C
+		[CHG] Device 00:1D:DF:BE:10:4C Connected: yes
+		[CHG] Device 00:1D:DF:BE:10:4C UUIDs:
+				00001101-0000-1000-8000-00805f9b34fb
+				0000110b-0000-1000-8000-00805f9b34fb
+				0000110e-0000-1000-8000-00805f9b34fb
+		[CHG] Device 00:1D:DF:BE:10:4C Paired: yes
+		Pairing successful
+		[CHG] Device 00:1D:DF:BE:10:4C Connected: no
+	[bluetooth]# trust 00:1D:DF:BE:10:4C
+		[CHG] Device 00:1D:DF:BE:10:4C Trusted: yes
+		Changing 00:1D:DF:BE:10:4C trust succeeded
+	[bluetooth]# connect 00:1D:DF:BE:10:4C
+		Attempting to connect to 00:1D:DF:BE:10:4C
+		Failed to connect: org.bluez.Error.Failed
+	[bluetooth]# scan off
+		[CHG] Device 00:1D:DF:BE:10:4C RSSI is nil
+		Discovery stopped
+		[CHG] Controller 00:19:5B:52:94:A3 Discovering: no
+	[bluetooth]# exit
+		Agent unregistered
+		[DEL] Controller 00:19:5B:52:94:A3 nasivadaras [default]
+
+
+
+	
+# Start PulseAudio - it should pick up the bluetooth devices that it can handle
+systemctl start pulseaudio.service
+
+pactl list short |grep bluez
+	11      module-bluez5-discover
+	12      module-bluez4-discover
+	13      module-bluez5-device    path=/org/bluez/hci0/dev_00_1D_DF_BE_10_4C
+	1       bluez_sink.00_1D_DF_BE_10_4C    module-bluez5-device.c  s16le 2ch 44100Hz       SUSPENDED
+	1       bluez_sink.00_1D_DF_BE_10_4C.monitor    module-bluez5-device.c  s16le 2ch 44100Hz       SUSPENDED
+	0       bluez_card.00_1D_DF_BE_10_4C    module-bluez5-device.c
+
+
+
+# Also see logs:
+
+# dmesg:
+	input: 00:1D:DF:BE:10:4C as /devices/virtual/input/input1
+
+# systemctl -l status pulseaudio.service
+● pulseaudio.service - Pulse Audio
+   Loaded: loaded (/etc/systemd/system/pulseaudio.service; disabled)
+   Active: active (running) since Fri 2015-08-14 01:05:19 CEST; 2min 21s ago
+ Main PID: 1708 (pulseaudio)
+   CGroup: /system.slice/pulseaudio.service
+           └─1708 /usr/bin/pulseaudio --system --disallow-exit --disable-shm
+
+Aug 14 01:05:19 nasivadaras systemd[1]: Started Pulse Audio.
+Aug 14 01:05:19 nasivadaras pulseaudio[1708]: W: [pulseaudio] main.c: Running in system mode, but --disallow-module-loading not set!
+Aug 14 01:05:19 nasivadaras pulseaudio[1708]: N: [pulseaudio] main.c: Running in system mode, forcibly disabling exit idle time!
+Aug 14 01:05:19 nasivadaras pulseaudio[1708]: W: [pulseaudio] main.c: OK, so you are running PA in system mode. Please note that you most likely shouldn't be doing that.
+Aug 14 01:05:19 nasivadaras pulseaudio[1708]: W: [pulseaudio] main.c: If you do it nonetheless then it's your own fault if things don't work as expected.
+Aug 14 01:05:19 nasivadaras pulseaudio[1708]: W: [pulseaudio] main.c: Please read http://pulseaudio.org/wiki/WhatIsWrongWithSystemMode for an explanation why system mode is usually a bad idea.
+Aug 14 01:05:19 nasivadaras pulseaudio[1708]: E: [pulseaudio] bluez4-util.c: org.bluez.Manager.GetProperties() failed: org.freedesktop.DBus.Error.UnknownMethod: Method "GetProperties" with signature "" on interface "org.bluez.Manager" doesn't exist
+
+
+
+
+# systemctl status bluetooth.service
+● bluetooth.service - Bluetooth service
+   Loaded: loaded (/lib/systemd/system/bluetooth.service; enabled)
+   Active: active (running) since Fri 2015-08-14 00:25:52 CEST; 40min ago
+     Docs: man:bluetoothd(8)
+ Main PID: 971 (bluetoothd)
+   Status: "Running"
+   CGroup: /system.slice/bluetooth.service
+           └─971 /usr/lib/bluetooth/bluetoothd
+
+Aug 14 00:43:45 nasivadaras bluetoothd[971]: Endpoint unregistered: sender=:1.6 path=/MediaEndpoint/A2DPSource
+Aug 14 00:43:45 nasivadaras bluetoothd[971]: Endpoint unregistered: sender=:1.6 path=/MediaEndpoint/A2DPSink
+Aug 14 00:43:45 nasivadaras bluetoothd[971]: Endpoint registered: sender=:1.7 path=/MediaEndpoint/A2DPSource
+Aug 14 00:43:45 nasivadaras bluetoothd[971]: Endpoint registered: sender=:1.7 path=/MediaEndpoint/A2DPSink
+Aug 14 00:44:32 nasivadaras bluetoothd[971]: /org/bluez/hci0/dev_00_1D_DF_BE_10_4C/fd2: fd(21) ready
+Aug 14 01:05:08 nasivadaras bluetoothd[971]: Endpoint unregistered: sender=:1.7 path=/MediaEndpoint/A2DPSource
+Aug 14 01:05:08 nasivadaras bluetoothd[971]: Endpoint unregistered: sender=:1.7 path=/MediaEndpoint/A2DPSink
+Aug 14 01:05:19 nasivadaras bluetoothd[971]: Endpoint registered: sender=:1.8 path=/MediaEndpoint/A2DPSource
+Aug 14 01:05:19 nasivadaras bluetoothd[971]: Endpoint registered: sender=:1.8 path=/MediaEndpoint/A2DPSink
+Aug 14 01:05:54 nasivadaras bluetoothd[971]: /org/bluez/hci0/dev_00_1D_DF_BE_10_4C/fd3: fd(21) ready
+	
+	
+	
+
+#################################################################
+# Try it!
+#################################################################
+
+# Test audio MP3
+mplayer -ao pulse file.mp3
+
+
+
+#######################################################################################################################
+## Credits: 
+## https://wiki.archlinux.org/index.php/Bluetooth_headset#Headset_via_Bluez5.2FPulseAudio
+## https://github.com/ev3dev/ev3dev/issues/198
+## http://www.instructables.com/id/Enhance-your-Raspberry-Pi-media-center-with-Blueto/?ALLSTEPS
+## (legacy) http://rootprompt.apatsch.net/2013/04/23/raspberry-pi-network-audio-player-pulseaudio-dlna-and-bluetooth-a2dp-part-3-bluetooth/
+#######################################################################################################################
