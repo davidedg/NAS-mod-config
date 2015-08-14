@@ -1,6 +1,10 @@
 # Install SAMBA package:
 apt-get install samba samba-common-bin tdb-tools
 
+On Debian 8 you might want also:
+apt-get install samba-vfs-modules
+
+
 cp /etc/samba/smb.conf /etc/samba/smb.conf.dist
 
 # See samba/etc/samba/smb.conf for a sample working samba configuration and adapt it to your needs.
