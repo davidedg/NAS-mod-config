@@ -4,23 +4,48 @@
 #################################################################
 #################################################################
 
-See bt-sound.txt for preparation of AUDIO subsystem
+See bt-sound.txt for preparation of AUDIO subsystem if you use Bluetooth
 
 #################################################################
 
 
 http://downloads.slimdevices.com/LogitechMediaServer_v7.8.0/
+or
+http://downloads.slimdevices.com/nightly (for Debian Jessie+)
 
 cd /opt
 wget http://downloads.slimdevices.com/LogitechMediaServer_v7.8.0/logitechmediaserver_7.8.0_all.deb
+or
+wget http://downloads.slimdevices.com/nightly/7.9/sc/c17601c/logitechmediaserver_7.9.0~1439372059_all.deb
+
+apt-get install gdebi-core
 gdebi logitechmediaserver_7.8.0_all.deb
+or
+gdebi logitechmediaserver_7.9.0~1439372059_all.deb
 
 
-# If we use USB stick as rootfs, media rescan can really slow system.
-# I move its data to a scratch partition on HDD:
-mkdir -p /scratch/var/lib
-mv /var/lib/squeezeboxserver /scratch/var/lib/
-ln -s /scratch/var/lib/squeezeboxserver /var/lib/squeezeboxserver
+
+Even nightly 7.9.x will die because of lack of needed modules for perl 5.20
+
+Thanks to http://forum.doozan.com/read.php?2,23287 :
+
+
+
+service logitechmediaserver stop
+
+wget https://server.vijge.net/static/squeezebox/arm-linux-gnueabi-thread-multi-64int.tar.gz
+D=$PWD
+cd /usr/share/squeezeboxserver/CPAN/arch/5.20/
+tar xzf $D/arm-linux-gnueabi-thread-multi-64int.tar.gz
+
+
+
+
+# Media rescan can really slow down if performed on usb and can waste rootfs.
+# So I move its data to a dedicated partition on HDD:
+mkdir -p /data/scratch/var/lib
+mv /var/lib/squeezeboxserver /data/scratch/var/lib/
+ln -s /data/scratch/var/lib/squeezeboxserver /var/lib/squeezeboxserver
 
 
 # LMS will run as user squeezeboxserver, let this user create PA cookies:
@@ -30,6 +55,10 @@ dpkg-statoverride --update --add squeezeboxserver root 0775 /usr/share/squeezebo
 ## Authorize for PA System Mode
 adduser squeezeboxserver pulse-access
 
+
+
+# Restart it:
+service logitechmediaserver start
 
 # Now open up interface on http://ip-of-nas:9000
 # configure basic settings and add a media library.
