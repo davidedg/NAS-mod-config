@@ -108,7 +108,7 @@ Description=Pulse Audio
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/pulseaudio --system --disallow-exit --disable-shm
+ExecStart=/usr/bin/pulseaudio --system --disallow-exit --disable-shm --exit-idle-time=-1
 
 [Install]
 WantedBy=multi-user.target
@@ -221,7 +221,6 @@ pactl list short |grep bluez
 
 Aug 14 01:05:19 nasivadaras systemd[1]: Started Pulse Audio.
 Aug 14 01:05:19 nasivadaras pulseaudio[1708]: W: [pulseaudio] main.c: Running in system mode, but --disallow-module-loading not set!
-Aug 14 01:05:19 nasivadaras pulseaudio[1708]: N: [pulseaudio] main.c: Running in system mode, forcibly disabling exit idle time!
 Aug 14 01:05:19 nasivadaras pulseaudio[1708]: W: [pulseaudio] main.c: OK, so you are running PA in system mode. Please note that you most likely shouldn't be doing that.
 Aug 14 01:05:19 nasivadaras pulseaudio[1708]: W: [pulseaudio] main.c: If you do it nonetheless then it's your own fault if things don't work as expected.
 Aug 14 01:05:19 nasivadaras pulseaudio[1708]: W: [pulseaudio] main.c: Please read http://pulseaudio.org/wiki/WhatIsWrongWithSystemMode for an explanation why system mode is usually a bad idea.
