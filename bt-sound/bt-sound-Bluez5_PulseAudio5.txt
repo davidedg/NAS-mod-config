@@ -37,8 +37,10 @@ See the kernel guide for the optional part about it.
 	
 
 # Install BlueZ-5  and PulseAudio-5 with Bluetooth support:
-apt-get --no-install-recommends install pulseaudio pulseaudio-module-bluetooth bluez bluez-tools bluez-firmware python-gobject-2 python-gobject
+apt-get --no-install-recommends install pulseaudio pulseaudio-module-bluetooth bluez
 
+# If your dongle is a based on a BCM203x chipset, install the firmware
+apt-get bluez-firmware
 
 # Install MPlayer, along with some codecs, to later test audio output
 apt-get install mplayer
